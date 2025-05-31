@@ -139,14 +139,9 @@ const updateUserProfile = async (req, res) => {
 const googleCallback = async (req, res) => {
   try {
     const token = generateToken(req.user._id);
-    const userData = {
-      name: req.user.username,
-      email: req.user.email,
-      profilePicture: req.user.avatar
-    };
 
-    // Redirect to frontend with token and user data
-    res.redirect(`${process.env.FRONTEND_URL}/auth/google?token=${token}&userData=${encodeURIComponent(JSON.stringify(userData))}`);
+    // Redirect to frontend with token
+    res.redirect(`${process.env.FRONTEND_URL}/auth/google?token=${token}`);
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }

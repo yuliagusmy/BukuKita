@@ -10,11 +10,6 @@ const {
   googleCallback,
 } = require('../controllers/authController');
 
-// Health check endpoint
-router.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
-});
-
 // Public routes
 router.post('/login', loginUser);
 router.post('/register', registerUser);

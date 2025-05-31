@@ -1,7 +1,6 @@
 import axios from 'axios';
 import React, { useEffect, useState } from 'react';
-import toast from 'react-hot-toast';
-import { FaEnvelope, FaGoogle, FaLock, FaUser } from 'react-icons/fa';
+import { FaEnvelope, FaGoogle, FaLock } from 'react-icons/fa';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const LoginPage: React.FC = () => {
@@ -14,7 +13,6 @@ const LoginPage: React.FC = () => {
     password: '',
   });
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     // Check for Google OAuth token in URL
@@ -22,7 +20,6 @@ const LoginPage: React.FC = () => {
     const token = params.get('token');
     if (token) {
       localStorage.setItem('token', token);
-      toast.success('Login successful!');
       navigate('/dashboard');
     }
   }, [location, navigate]);
@@ -32,51 +29,20 @@ const LoginPage: React.FC = () => {
       ...formData,
       [e.target.name]: e.target.value,
     });
-    setError(''); // Clear error when user types
-  };
-
-  const validateForm = () => {
-    if (!isLogin && !formData.username) {
-      setError('Username is required');
-      return false;
-    }
-    if (!formData.email) {
-      setError('Email is required');
-      return false;
-    }
-    if (!formData.password) {
-      setError('Password is required');
-      return false;
-    }
-    if (!isLogin && formData.password.length < 6) {
-      setError('Password must be at least 6 characters');
-      return false;
-    }
-    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!validateForm()) {
-      return;
-    }
-
-    setIsLoading(true);
     try {
       const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
       const response = await axios.post(endpoint, formData);
 
       localStorage.setItem('token', response.data.token);
-      localStorage.setItem('userData', JSON.stringify(response.data));
-      toast.success(isLogin ? 'Login successful!' : 'Registration successful!');
       navigate('/dashboard');
     } catch (error: any) {
       setError(error.response?.data?.message || 'An error occurred');
-      toast.error(error.response?.data?.message || 'An error occurred');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -111,7 +77,7 @@ const LoginPage: React.FC = () => {
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <FaUser className="h-5 w-5 text-gray-400" />
+                    <FaEnvelope className="h-5 w-5 text-gray-400" />
                   </div>
                   <input
                     id="username"
@@ -177,12 +143,9 @@ const LoginPage: React.FC = () => {
           <div>
             <button
               type="submit"
-              disabled={isLoading}
-              className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${
-                isLoading ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
-              {isLoading ? 'Loading...' : isLogin ? 'Sign in' : 'Sign up'}
+              {isLogin ? 'Sign in' : 'Sign up'}
             </button>
           </div>
         </form>
