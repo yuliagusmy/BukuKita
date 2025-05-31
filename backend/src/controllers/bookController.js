@@ -1,12 +1,13 @@
 const Book = require('../models/Book');
 const User = require('../models/User');
+const { createBookCompletedNotification } = require('../utils/notificationUtils');
 
 // @desc    Create a new book
 // @route   POST /api/books
 // @access  Private
 const createBook = async (req, res) => {
   try {
-    const { title, author, genre, totalPages, status } = req.body;
+    const { title, author, genre, totalPages, notes, status } = req.body;
 
     const book = await Book.create({
       user: req.user._id,
@@ -14,7 +15,9 @@ const createBook = async (req, res) => {
       author,
       genre,
       totalPages,
-      status,
+      currentPage: 0,
+      notes,
+      status: status || 'to_read',
     });
 
     res.status(201).json(book);
@@ -74,8 +77,8 @@ const updateBook = async (req, res) => {
       return res.status(404).json({ message: 'Book not found' });
     }
 
-    // Check if book is being completed
-    const wasCompleted = book.status !== 'completed' && status === 'completed';
+    const wasCompleted = book.status === 'completed';
+    const isNowCompleted = status === 'completed';
 
     book.title = title || book.title;
     book.author = author || book.author;
@@ -86,18 +89,16 @@ const updateBook = async (req, res) => {
     book.notes = notes || book.notes;
     book.rating = rating || book.rating;
 
-    if (wasCompleted) {
+    if (isNowCompleted && !wasCompleted) {
       book.completedDate = new Date();
-
-      // Update user stats
       const user = await User.findById(req.user._id);
       user.booksCompleted += 1;
-      user.xp += 100; // XP bonus for completing a book
       await user.save();
+      await createBookCompletedNotification(user, book);
     }
 
-    const updatedBook = await book.save();
-    res.json(updatedBook);
+    await book.save();
+    res.json(book);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -126,10 +127,44 @@ const deleteBook = async (req, res) => {
   }
 };
 
+// @desc    Get books by status
+// @route   GET /api/books/status/:status
+// @access  Private
+const getBooksByStatus = async (req, res) => {
+  try {
+    const books = await Book.find({
+      user: req.user._id,
+      status: req.params.status,
+    });
+    res.json(books);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get books by genre
+// @route   GET /api/books/genre/:genre
+// @access  Private
+const getBooksByGenre = async (req, res) => {
+  try {
+    const books = await Book.find({
+      user: req.user._id,
+      genre: req.params.genre,
+    });
+    res.json(books);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   createBook,
   getBooks,
   getBookById,
   updateBook,
   deleteBook,
+  getBooksByStatus,
+  getBooksByGenre,
 };

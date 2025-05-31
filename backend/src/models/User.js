@@ -5,7 +5,6 @@ const userSchema = new mongoose.Schema({
   username: {
     type: String,
     required: true,
-    unique: true,
     trim: true,
   },
   email: {
@@ -17,7 +16,21 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true,
+    required: function() {
+      return !this.isGoogleUser;
+    },
+  },
+  avatar: {
+    type: String,
+    default: '',
+  },
+  googleId: {
+    type: String,
+    sparse: true,
+  },
+  isGoogleUser: {
+    type: Boolean,
+    default: false,
   },
   level: {
     type: Number,
@@ -33,7 +46,7 @@ const userSchema = new mongoose.Schema({
   },
   title: {
     type: String,
-    default: 'Pustakawan Pemula Lv.1',
+    default: 'Novice Reader',
   },
   booksCompleted: {
     type: Number,
@@ -50,17 +63,27 @@ const userSchema = new mongoose.Schema({
   lastReadDate: {
     type: Date,
   },
+  badges: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Badge',
+  }],
 }, {
   timestamps: true,
 });
 
 // Hash password before saving
 userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) {
-    next();
+  if (!this.isModified('password') || this.isGoogleUser) {
+    return next();
   }
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Method to compare password

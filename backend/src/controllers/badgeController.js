@@ -1,14 +1,32 @@
 const Badge = require('../models/Badge');
-const Book = require('../models/Book');
 const User = require('../models/User');
+const Book = require('../models/Book');
+const ReadingSession = require('../models/ReadingSession');
+const {
+  createBadgeNotification,
+  createLevelUpNotification,
+} = require('../utils/notificationUtils');
 
-// @desc    Get all badges for a user
+// @desc    Get all badges
 // @route   GET /api/badges
 // @access  Private
 const getBadges = async (req, res) => {
   try {
-    const badges = await Badge.find({ user: req.user._id }).sort({ earnedDate: -1 });
+    const badges = await Badge.find();
     res.json(badges);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get user's badges
+// @route   GET /api/badges/user
+// @access  Private
+const getUserBadges = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).populate('badges');
+    res.json(user.badges);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -21,159 +39,142 @@ const getBadges = async (req, res) => {
 const checkAndAwardBadges = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
-    const books = await Book.find({ user: req.user._id, status: 'completed' });
+    const badges = await Badge.find();
+    const newBadges = [];
+    let levelUp = false;
 
-    // Check genre badges
-    const genreCounts = {};
-    books.forEach(book => {
-      genreCounts[book.genre] = (genreCounts[book.genre] || 0) + 1;
-    });
+    // Check each badge criteria
+    for (const badge of badges) {
+      // Skip if user already has this badge
+      if (user.badges.includes(badge._id)) continue;
 
-    for (const [genre, count] of Object.entries(genreCounts)) {
-      let tier = 0;
-      if (count >= 30) tier = 4;
-      else if (count >= 15) tier = 3;
-      else if (count >= 5) tier = 2;
-      else if (count >= 1) tier = 1;
+      let shouldAward = false;
 
-      if (tier > 0) {
-        const badgeName = getGenreBadgeName(genre, tier);
-        const badgeDescription = getGenreBadgeDescription(genre, tier);
+      switch (badge.type) {
+        case 'pages_read':
+          shouldAward = user.totalPagesRead >= badge.requirement;
+          break;
 
-        // Check if badge already exists
-        const existingBadge = await Badge.findOne({
-          user: req.user._id,
-          name: badgeName,
-        });
-
-        if (!existingBadge) {
-          await Badge.create({
+        case 'books_completed':
+          const completedBooks = await Book.countDocuments({
             user: req.user._id,
-            name: badgeName,
-            description: badgeDescription,
-            imageUrl: `/badges/${genre.toLowerCase()}-${tier}.svg`,
-            type: 'genre',
-            category: genre,
-            tier,
+            status: 'completed',
           });
-        }
+          shouldAward = completedBooks >= badge.requirement;
+          break;
+
+        case 'reading_streak':
+          shouldAward = user.readingStreak >= badge.requirement;
+          break;
+
+        case 'genre_master':
+          const genreBooks = await Book.countDocuments({
+            user: req.user._id,
+            genre: badge.requirement,
+            status: 'completed',
+          });
+          shouldAward = genreBooks >= 5; // Complete 5 books in a genre
+          break;
+
+        case 'level_reached':
+          shouldAward = user.level >= badge.requirement;
+          break;
+      }
+
+      if (shouldAward) {
+        user.badges.push(badge._id);
+        newBadges.push(badge);
+        await createBadgeNotification(user, badge);
       }
     }
 
-    // Check achievement badges
-    // Marathon Reader - 7 day streak
-    if (user.readingStreak >= 7) {
-      const existingBadge = await Badge.findOne({
-        user: req.user._id,
-        name: 'Marathon Reader',
-      });
-
-      if (!existingBadge) {
-        await Badge.create({
-          user: req.user._id,
-          name: 'Marathon Reader',
-          description: 'Read books for 7 consecutive days',
-          imageUrl: '/badges/marathon-reader.svg',
-          type: 'achievement',
-        });
-      }
+    // Check for level up
+    if (user.xp >= user.xpToNextLevel) {
+      user.level += 1;
+      user.xp -= user.xpToNextLevel;
+      user.xpToNextLevel = Math.floor(user.xpToNextLevel * 1.5);
+      user.title = `Pustakawan Level ${user.level}`;
+      levelUp = true;
+      await createLevelUpNotification(user);
     }
 
-    // 1000 Pages
-    if (user.totalPagesRead >= 1000) {
-      const existingBadge = await Badge.findOne({
-        user: req.user._id,
-        name: '1000 Pages!',
-      });
-
-      if (!existingBadge) {
-        await Badge.create({
-          user: req.user._id,
-          name: '1000 Pages!',
-          description: 'Read a total of 1000 pages',
-          imageUrl: '/badges/1000-pages.svg',
-          type: 'achievement',
-        });
-      }
+    if (newBadges.length > 0 || levelUp) {
+      await user.save();
     }
 
-    // Multi-genre Master
-    const completedGenres = new Set(books.map(book => book.genre));
-    if (completedGenres.size >= 5) {
-      const existingBadge = await Badge.findOne({
-        user: req.user._id,
-        name: 'Multi-genre Master',
-      });
-
-      if (!existingBadge) {
-        await Badge.create({
-          user: req.user._id,
-          name: 'Multi-genre Master',
-          description: 'Completed books from 5 different genres',
-          imageUrl: '/badges/multigenre-master.svg',
-          type: 'achievement',
-        });
-      }
-    }
-
-    // Level Up Maniac
-    if (user.level >= 10) {
-      const existingBadge = await Badge.findOne({
-        user: req.user._id,
-        name: 'Level Up Maniac',
-      });
-
-      if (!existingBadge) {
-        await Badge.create({
-          user: req.user._id,
-          name: 'Level Up Maniac',
-          description: 'Reached level 10',
-          imageUrl: '/badges/level-up-maniac.svg',
-          type: 'achievement',
-        });
-      }
-    }
-
-    const updatedBadges = await Badge.find({ user: req.user._id }).sort({ earnedDate: -1 });
-    res.json(updatedBadges);
+    res.json({
+      newBadges,
+      totalBadges: user.badges.length,
+      levelUp,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 };
 
-// Helper functions for badge names and descriptions
-const getGenreBadgeName = (genre, tier) => {
-  const names = {
-    Fantasy: ['Penjelajah Dunia Fantasi', 'Pendekar Legenda Fantasi', 'Penguasa Alam Magis', 'Arsitek Dunia Khayalan'],
-    Philosophy: ['Perenung Sunyi', 'Penjelajah Akal', 'Filsuf Sejati', 'Arsitek Pemikiran Abadi'],
-    // Add more genres as needed
-  };
+// @desc    Get badge progress
+// @route   GET /api/badges/progress
+// @access  Private
+const getBadgeProgress = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    const badges = await Badge.find();
+    const progress = [];
 
-  return names[genre]?.[tier - 1] || `${genre} Reader Tier ${tier}`;
-};
+    for (const badge of badges) {
+      let current = 0;
+      let requirement = badge.requirement;
 
-const getGenreBadgeDescription = (genre, tier) => {
-  const descriptions = {
-    Fantasy: [
-      'Completed your first fantasy book',
-      'Completed 5 fantasy books',
-      'Completed 15 fantasy books',
-      'Completed 30 fantasy books',
-    ],
-    Philosophy: [
-      'Completed your first philosophy book',
-      'Completed 5 philosophy books',
-      'Completed 15 philosophy books',
-      'Completed 30 philosophy books',
-    ],
-    // Add more genres as needed
-  };
+      switch (badge.type) {
+        case 'pages_read':
+          current = user.totalPagesRead;
+          break;
 
-  return descriptions[genre]?.[tier - 1] || `Completed ${tier * 5} ${genre} books`;
+        case 'books_completed':
+          current = await Book.countDocuments({
+            user: req.user._id,
+            status: 'completed',
+          });
+          break;
+
+        case 'reading_streak':
+          current = user.readingStreak;
+          break;
+
+        case 'genre_master':
+          current = await Book.countDocuments({
+            user: req.user._id,
+            genre: badge.requirement,
+            status: 'completed',
+          });
+          requirement = 5; // Complete 5 books in a genre
+          break;
+
+        case 'level_reached':
+          current = user.level;
+          break;
+      }
+
+      progress.push({
+        badge,
+        current,
+        requirement,
+        progress: Math.min((current / requirement) * 100, 100),
+        earned: user.badges.includes(badge._id),
+      });
+    }
+
+    res.json(progress);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
 };
 
 module.exports = {
   getBadges,
+  getUserBadges,
   checkAndAwardBadges,
+  getBadgeProgress,
 };

@@ -1,16 +1,30 @@
 const express = require('express');
 const router = express.Router();
+const { protect } = require('../middleware/authMiddleware');
 const {
   createReadingSession,
   getReadingSessions,
-  getReadingSessionsByRange,
+  getReadingSessionsByDate,
+  getReadingSessionsByBook,
+  getReadingStats,
 } = require('../controllers/readingSessionController');
-const { protect } = require('../middleware/auth');
 
-router.route('/')
-  .post(protect, createReadingSession)
-  .get(protect, getReadingSessions);
+// All routes are protected
+router.use(protect);
 
-router.get('/range', protect, getReadingSessionsByRange);
+// Create new reading session
+router.post('/', createReadingSession);
+
+// Get all reading sessions
+router.get('/', getReadingSessions);
+
+// Get reading sessions by date
+router.get('/date/:date', getReadingSessionsByDate);
+
+// Get reading sessions by book
+router.get('/book/:bookId', getReadingSessionsByBook);
+
+// Get reading statistics
+router.get('/stats', getReadingStats);
 
 module.exports = router;

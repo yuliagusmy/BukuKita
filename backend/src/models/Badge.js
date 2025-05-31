@@ -1,44 +1,44 @@
 const mongoose = require('mongoose');
 
-const badgeSchema = new mongoose.Schema({
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
-    required: true,
-    ref: 'User',
+const badgeSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+    description: {
+      type: String,
+      required: true,
+    },
+    imageUrl: {
+      type: String,
+      required: true,
+    },
+    type: {
+      type: String,
+      required: true,
+      enum: ['pages_read', 'books_completed', 'reading_streak', 'genre_master', 'level_reached'],
+    },
+    requirement: {
+      type: Number,
+      required: true,
+    },
+    category: {
+      type: String,
+      enum: ['achievement', 'genre', 'special'],
+      default: 'achievement',
+    },
+    tier: {
+      type: Number,
+      min: 1,
+      max: 4,
+      default: 1,
+    },
   },
-  name: {
-    type: String,
-    required: true,
-  },
-  description: {
-    type: String,
-    required: true,
-  },
-  imageUrl: {
-    type: String,
-    required: true,
-  },
-  earnedDate: {
-    type: Date,
-    default: Date.now,
-  },
-  type: {
-    type: String,
-    required: true,
-    enum: ['genre', 'achievement'],
-  },
-  category: {
-    type: String,
-  },
-  tier: {
-    type: Number,
-    min: 1,
-    max: 4,
-  },
-}, {
-  timestamps: true,
-});
+  {
+    timestamps: true,
+  }
+);
 
-const Badge = mongoose.model('Badge', badgeSchema);
-
-module.exports = Badge;
+module.exports = mongoose.model('Badge', badgeSchema);
